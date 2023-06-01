@@ -1,0 +1,114 @@
+#include <Arduino_FreeRTOS.h>
+#include <queue.h>
+#include <task.h>
+#include <Wire.h>
+#include <LiquidCrystal_I2C.h>
+LiquidCrystal_I2C lcd(0x27, 16, 2);
+#define dongco  10
+#define ledr 8
+#define ledb 7
+#define flamePin 9
+#define buzzer 4
+TaskHandle_t xReadss;
+TaskHandle_t xHandler;
+QueueHandle_t queueGas;
+QueueHandle_t queueFlame;
+void setup() {
+  Serial.begin(9600);
+  Serial.println("System is setting up!");
+  lcd.init();
+  lcd.backlight();
+  lcd.clear();
+  pinMode(9, INPUT);
+  pinMode(4, OUTPUT);
+  pinMode(7, OUTPUT);
+  pinMode(8, OUTPUT);
+  pinMode(11, INPUT);
+  pinMode(12, OUTPUT);
+  pinMode(10, OUTPUT);
+  queueGas = xQueueCreate(1, sizeof(int));
+  queueFlame = xQueueCreate(1, sizeof(int));
+  xTaskCreate(taskReadss, "readss", 128, NULL, 2, &xReadss);
+  xTaskCreate(taskHandler, "handler", 128, NULL, 1, &xHandler);
+}
+void loop() {}
+void taskReadss(void *pvParameters) {
+  while (1) {
+    //    Serial.println("- - -!- - -");
+    int gas = analogRead(A0);
+    //    lcd.clear();
+    lcd.setCursor(2, 0);
+    lcd.print("Gas value:");
+    if (gas >= 100) {
+      lcd.print(gas);
+      lcd.print("  ");
+    } else {
+      lcd.print(gas);
+      lcd.print(" ");
+    }
+    int flameStatus = digitalRead(flamePin);
+//    Serial.print("Khi gas: ");
+    Serial.print(gas);
+    Serial.print(",");
+    Serial.println(flameStatus);
+    delay(500);
+    xQueueOverwrite(queueGas, (void*)&gas);
+    xQueueOverwrite(queueFlame , (void*)&flameStatus);
+    vTaskDelay(1000 / portTICK_PERIOD_MS);
+    //    taskYIELD();
+  }
+}
+void taskHandler(void *pvParameters) {
+  int gBuffer;
+  int fBuffer;
+  //  Serial.println("Task 2coming!");
+  while (1) {
+    //    Serial.println("Handinggg!");
+    xQueuePeek(queueGas, &gBuffer, ( TickType_t ) 10 );
+    xQueuePeek(queueFlame, &fBuffer, ( TickType_t ) 10 );
+    //    Serial.println("Peeking data!");
+
+    if ( (gBuffer < 600) && (fBuffer == 1) ) {
+      lcd.setCursor(0, 1);
+      lcd.print("<--- Normal --->");
+      digitalWrite(ledr, LOW);
+      digitalWrite(ledb, HIGH);
+      digitalWrite(buzzer, LOW);
+      digitalWrite(dongco, LOW);
+    } else if ( (gBuffer < 600) && (fBuffer == 0) ) {
+      //      lcd.clear();
+      lcd.setCursor(0, 1);
+      lcd.print("  Fire deteced! ");
+      digitalWrite(ledr, HIGH);
+      digitalWrite(ledb, LOW);
+      digitalWrite(buzzer, HIGH);
+      digitalWrite(dongco, HIGH);
+      //      Serial.println("Chayyyyyyy");
+    } else if ( (gBuffer >= 600) && (fBuffer == 1) ) {
+      lcd.setCursor(0, 1);
+      lcd.print("  Gas deteced!  ");
+      digitalWrite(ledr, HIGH);
+      digitalWrite(ledb, LOW);
+      digitalWrite(buzzer, HIGH);
+      digitalWrite(dongco, LOW);
+      //      Serial.println("Ro ri gassssss");
+    } else if ( (gBuffer >= 600) && (fBuffer == 0) ) {
+      lcd.setCursor(0, 1);
+      lcd.print("WARNING WARNING!");
+      digitalWrite(ledr, HIGH);
+      digitalWrite(ledb, LOW);
+      digitalWrite(buzzer, HIGH);
+      digitalWrite(dongco, HIGH);
+      //      Serial.println("NGUY HIEM!");
+    } else {
+      digitalWrite(ledr, LOW);
+      digitalWrite(ledb, HIGH);
+      digitalWrite(buzzer, LOW);
+      digitalWrite(dongco, LOW);
+    }
+
+    vTaskDelay(1000 / portTICK_PERIOD_MS);
+    //    taskYIELD();
+  }
+
+}

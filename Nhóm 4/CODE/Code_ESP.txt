@@ -1,0 +1,170 @@
+#define FIREBASE_HOST "connect-28148-default-rtdb.firebaseio.com"
+#define FIREBASE_AUTH "aPORdEC8vP9kpUB44jMbFV3OqXrJvmALzHPTxs2D"
+#define button D5 // D5 button điều khiển cửa sổ
+#include <SoftwareSerial.h>
+#include "ESP8266Firebase.h"
+#include "FirebaseESP8266.h"
+#include <ESP8266WiFi.h> 
+#include <ArduinoJson.h>
+#include <Servo.h>
+#include <OneButton.h>
+//#include <FirebaseArduino.h>
+SoftwareSerial Esp(D7, D6); //RX, TX
+char ssid[] = "P201"; //thay bằng tên wifi 
+char pass[] = "xincamon201"; //thay mật khẩu wifi
+FirebaseData firebaseData;
+String path ="/";
+FirebaseJson json;
+Servo myservo;
+boolean bt_state=HIGH; 
+int servopin=4; // D2 Kết nối servo
+boolean cuaState; 
+
+void setup() {
+  Serial.begin(9600);
+  Esp.begin(9600);
+  WiFi.begin(ssid, pass);
+  delay(100);
+  pinMode(button,INPUT_PULLUP);  
+  myservo.attach(servopin);
+  while(WiFi.status() != WL_CONNECTED){
+    delay(500);
+    Serial.print(".");
+    }
+  Firebase.begin(FIREBASE_HOST, FIREBASE_AUTH);
+  Firebase.reconnectWiFi(true);
+  if( !Firebase.beginStream(firebaseData, path)){
+    Serial.println("Reason: "+ firebaseData.errorReason());
+    Serial.println(".");
+    }
+   Serial.print("connected with Ip: ");
+   Serial.println(WiFi.localIP());
+   Serial.println();
+  
+}
+void loop(){
+  Esp.listen();
+  if (Esp.isListening()) {
+    Serial.println("Port One is listening!");
+    delay(500);
+  } else {
+    Serial.println("Port One is not listening!");
+
+  }
+  String  data1;
+  char *val1;
+  String  data2;
+  char *val2;
+  int temp1;
+  int temp2;
+  data1 = Esp.readString();
+  int n = data1.length();
+  // declaring character array
+  char char_array[n + 1];
+
+  // copying the contents of the
+  // string to char array
+  strcpy(char_array, data1.c_str());
+
+  val1 = strtok(char_array, ",");
+  val2 = strtok(NULL, ",");
+  temp1 = atoi(val1);
+  temp2 = atoi(val2);
+  if ( (temp1 < 600) && (temp2 == 0) ) {
+    if(!cuaState){
+      for(int pos =180; pos >=0; pos -= 5){
+        myservo.write(pos);
+        delay(0);
+        }
+        cuaState=true;
+        Firebase.setBool(firebaseData, path + "/window", cuaState);
+    }
+  } else if ( (temp1 >= 600) && (temp2 == 1) ) {
+    if(!cuaState){
+      for(int pos =180; pos >=0; pos -= 5){
+        myservo.write(pos);
+        delay(0);
+        }
+        cuaState=true;
+        Firebase.setBool(firebaseData, path + "/window", cuaState);
+      }
+  } else if ( (temp1 >= 600) && (temp2 == 0) ) {
+    if(!cuaState){
+      for(int pos =180; pos >=0; pos -= 5){
+        myservo.write(pos);
+        delay(0);
+        }
+        cuaState=true;
+        Firebase.setBool(firebaseData, path + "/window", cuaState);
+      }
+  }
+  sendData_FireBase("gas", temp1);
+  sendData_FireBase("fire", temp2);
+  check_button(); 
+  Firebase.getBool(firebaseData,"//window");
+  boolean window = firebaseData.boolData();
+  boolean interrupt = firebaseData.boolData();
+  Serial.println(window);
+  delay(1000);
+  if(cuaState != window){
+    cuaState = window;
+    controlDoor1();
+    }
+  
+}
+
+void sendData_FireBase(String pathString, int value){
+  Firebase.setInt(firebaseData, path + "/"+ pathString, value);
+}
+void check_button()
+{
+  if(digitalRead(button)==LOW)
+  {
+    if(bt_state==HIGH)
+    { 
+      controlDoor();
+      Firebase.setBool(firebaseData, path + "/window", cuaState);
+      bt_state=LOW;
+      delay(1000);
+    }
+  }
+  else
+  {
+    bt_state=HIGH;
+  }
+}
+void controlDoor(){
+  if(cuaState){
+    for (int pos = 0; pos <= 180; pos += 5){
+      myservo.write(pos);
+      delay(0);
+    }
+    cuaState=false;
+    
+  }else{
+    for (int pos = 180; pos >= 0; pos -= 5) {
+      myservo.write(pos);
+      delay(0);
+    }
+    cuaState=true;
+    
+  }
+}
+void controlDoor1(){
+  if(!cuaState){
+    for (int pos = 0; pos <= 180; pos += 5){
+      myservo.write(pos);
+      delay(0);
+    }
+    Serial.println("đóng");
+    delay(1000);
+  }else{
+    for (int pos = 180; pos >= 0; pos -= 5) {
+      myservo.write(pos);
+      delay(0);
+    }
+    Serial.println("Mở");
+    delay(1000);
+    
+  }
+}
